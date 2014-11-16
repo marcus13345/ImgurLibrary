@@ -8,6 +8,8 @@ import java.net.URL;
 import java.sql.Connection;
 import java.util.Iterator;
 
+import javax.imageio.ImageIO;
+
 import org.apache.commons.io.IOUtils;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -15,78 +17,96 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
- * now you need to have an instance.
- * because only one request at a time.
- * new request? new instance.
- * later, TODO, make there be a busy
- * variable or something.
+ * now you need to have an instance. because only one request at a time. new
+ * request? new instance. later, TODO, make there be a busy variable or
+ * something.
+ * 
  * @author Marcus
  *
  */
 public class ImgurRequest {
 
 	// used if no path is pre specified.
-	private String baseDir = System.getenv("USERPROFILE") + "\\Desktop\\Imgur\\";
+	private String baseDir = System.getenv("USERPROFILE")
+			+ "\\Desktop\\Imgur\\";
 
 	// my personal API key so i can access imgur api and stuff
 	private String CLIENT_ID = "76535d44f1f94da";
 
-	//to track progress
-	//prediction because divide by zero errors are infectious
-	private volatile int totalImages = 0, imagesComplete = 0, predictedTotal = 1;
-	
-	//busy? ornahhhh
+	// to track progress
+	// prediction because divide by zero errors are infectious
+	private volatile int totalImages = 0, imagesComplete = 0,
+			predictedTotal = 1;
+
+	// busy? ornahhhh
 	private boolean busy = false;
-	
-	//have we scanned all the pages in the current request?
+
+	// have we scanned all the pages in the current request?
 	private boolean scannedAllPages = true;
-	
-	//title so this can have a label
+
+	// title so this can have a label
 	private String title = "";
-	
+
+	// how many pages scanned and to be scanned
+	private int pagesScanned = 0, pagesToScan = 0;
+
+	private ImageListener listener;
+
+	public ImgurRequest(ImageListener listener) {
+		this.listener = listener;
+	}
+
 	// sort is usually time but i thought i'd be nice to yall.
-	public void saveSubreddit(final String subreddit, final int pages, final String sort) {
+	public void saveSubreddit(final String subreddit, final int pages,
+			final String sort) {
 		totalImages = imagesComplete = 0;
 		scannedAllPages = false;
 		busy = true;
 		predictedTotal = pages * 60;
 		title = subreddit;
-		new Thread(new Runnable() {public void run() {
+		pagesToScan = pages;
+		pagesScanned = 0;
+		new Thread(new Runnable() {
+			public void run() {
 
-			// https://api.imgur.com/3/gallery/r/{subreddit}/{sort}/{page}
-			for (int page = 0; page < pages; page++) {
-				try {
-					String path = "https://api.imgur.com/3/gallery/r/" + subreddit + "/" + sort + "/" + page + ".json";
+				// https://api.imgur.com/3/gallery/r/{subreddit}/{sort}/{page}
+				for (int page = 0; page < pages; page++) {
+					try {
+						String path = "https://api.imgur.com/3/gallery/r/"
+								+ subreddit + "/" + sort + "/" + page + ".json";
 
-					HttpURLConnection connection = (HttpURLConnection) ((new URL(path)).openConnection());
+						HttpURLConnection connection = (HttpURLConnection) ((new URL(
+								path)).openConnection());
 
-					connection.setRequestMethod("GET");
-					connection.addRequestProperty("Authorization", "client-id " + CLIENT_ID);
-					connection.connect();
-					
-					if(connection.getResponseCode() == 200) { 
-						
-						InputStream response = connection.getInputStream();
-						saveImages(response);
-						
-					}else{
-						title = "error code " + connection.getResponseCode();
+						connection.setRequestMethod("GET");
+						connection.addRequestProperty("Authorization",
+								"client-id " + CLIENT_ID);
+						connection.connect();
+
+						if (connection.getResponseCode() == 200) {
+
+							InputStream response = connection.getInputStream();
+							saveImages(response);
+
+						} else {
+							title = "error code "
+									+ connection.getResponseCode();
+							busy = false;
+						}
+
+					} catch (Exception e) {
+						e.printStackTrace();
 						busy = false;
 					}
-					
-					scannedAllPages = true;
-					
-				} catch (Exception e) {
-					e.printStackTrace();
-					busy = false;
+					pagesScanned++;
 				}
+
+				scannedAllPages = true;
 			}
-			
-		}}).start();
-		
-		
+		}).start();
+
 	}
-	
+
 	public void saveImages(final InputStream response) {
 		new Thread(new Runnable() {
 			public void run() {
@@ -94,9 +114,9 @@ public class ImgurRequest {
 					ObjectMapper om = new ObjectMapper();
 
 					JsonNode root;
-					
+
 					root = om.readTree(response);
-					
+
 					JsonNode imagesNode = root.get("data");
 					Iterator<JsonNode> imagesIterator = imagesNode.iterator();
 
@@ -122,25 +142,25 @@ public class ImgurRequest {
 						extension = parseExtension(extension);
 
 						String subreddit = item.get("section").asText();
-						
+
 						saveID(id, subreddit + "\\", extension, fileSize);
 
-						imagesComplete ++;
-						
+						imagesComplete++;
+
 						imageCounter++;
 					}
-					
-					if(imagesComplete == totalImages) {
+
+					if (imagesComplete == totalImages) {
 						busy = false;
 					}
-					
+
 				} catch (Exception e) {
 					e.printStackTrace();
 				}
 			}
 		}).start();
 	}
-	
+
 	private String parseExtension(String ext) {
 		if (ext.equals("image/jpeg")) {
 			return ".jpg";
@@ -156,18 +176,31 @@ public class ImgurRequest {
 		return ".jpg";
 	}
 
-	public void saveID(String hash, String subfolder, String extension, int filesize) {
+	public void saveID(String hash, String subfolder, String extension,
+			int filesize) {
 		try {
-			
+
 			// make sure our directories exist no matter what
 			new File(baseDir + subfolder).mkdirs();
 			new File(baseDir + "backgrounds\\" + subfolder).mkdirs();
 
 			// if we haven't fully saved this yet...
 			if (!(new File(baseDir + subfolder + hash + extension).length() == filesize)) {
-				InputStream in = new URL("http://i.imgur.com/" + hash + extension).openConnection().getInputStream();
-				OutputStream out = new FileOutputStream(baseDir + subfolder + hash + extension);
+				InputStream in = new URL("http://i.imgur.com/" + hash
+						+ extension).openConnection().getInputStream();
+				OutputStream out = new FileOutputStream(baseDir + subfolder
+						+ hash + extension);
 				copy(in, out);
+			}
+
+			if (listener != null) {
+				try {
+
+					listener.newImage(ImageIO.read(new File(baseDir + subfolder
+							+ hash + extension)));
+				} catch (Exception e) {
+					// eh
+				}
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -203,11 +236,15 @@ public class ImgurRequest {
 		}
 	}
 
-	
 	public double getProgress() {
-		return scannedAllPages ? (double)imagesComplete/(double)totalImages : (double)imagesComplete/(double)predictedTotal;
+		return scannedAllPages ? (double) imagesComplete / (double) totalImages
+				: (double) imagesComplete / (double) predictedTotal;
 	}
-	
+
+	public double getScanProgress() {
+		return (double) (pagesScanned) / pagesToScan;
+	}
+
 	public int getImagesDiscovered() {
 		return totalImages;
 	}
@@ -215,7 +252,7 @@ public class ImgurRequest {
 	public int getImagesDownloaded() {
 		return imagesComplete;
 	}
-	
+
 	public String getTitle() {
 		return title;
 	}
