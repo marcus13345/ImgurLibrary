@@ -7,10 +7,12 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.sql.Connection;
 import java.util.Iterator;
+import java.util.stream.Stream;
 
 import javax.imageio.ImageIO;
 
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.io.output.TeeOutputStream;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -86,7 +88,7 @@ public class ImgurRequest {
 						if (connection.getResponseCode() == 200) {
 
 							InputStream response = connection.getInputStream();
-							saveImages(response);
+							saveArray(response);
 
 						} else {
 							title = "error code "
@@ -107,7 +109,58 @@ public class ImgurRequest {
 
 	}
 
-	public void saveImages(final InputStream response) {
+	// sort is usually time but i thought i'd be nice to yall.
+	public void saveSubmitted(final String user, final int pages) {
+		totalImages = imagesComplete = 0;
+		scannedAllPages = false;
+		busy = true;
+		predictedTotal = pages * 60;
+		title = user;
+		pagesToScan = pages;
+		pagesScanned = 0;
+		new Thread(new Runnable() {
+			public void run() {
+
+				// https://api.imgur.com/3/gallery/r/{subreddit}/{sort}/{page}
+				for (int page = 0; page < pages; page++) {
+					try {
+						String path = "https://api.imgur.com/3/account/" + user
+								+ "/submissions/" + page + ".json";
+
+						HttpURLConnection connection = (HttpURLConnection) ((new URL(
+								path)).openConnection());
+
+						connection.setRequestMethod("GET");
+						connection.addRequestProperty("Authorization",
+								"client-id " + CLIENT_ID);
+						connection.connect();
+
+						if (connection.getResponseCode() == 200) {
+
+							InputStream response = connection.getInputStream();
+
+							saveArray(response);
+
+						} else {
+							title = "error code "
+									+ connection.getResponseCode();
+							busy = false;
+						}
+
+					} catch (Exception e) {
+						e.printStackTrace();
+						busy = false;
+					}
+					pagesScanned++;
+				}
+
+				scannedAllPages = true;
+			}
+		}).start();
+
+	}
+
+	public void saveArray(final InputStream response) {
 		new Thread(new Runnable() {
 			public void run() {
 				try {
@@ -134,16 +187,19 @@ public class ImgurRequest {
 
 						JsonNode item = imagesIterator.next();
 
-						String id = item.get("id").asText();
-						// boolean album = item.get("is_album").asBoolean();
-						int fileSize = item.get("size").asInt();
+						boolean album = item.get("is_album").asBoolean();
 
-						String extension = item.get("type").asText();
-						extension = parseExtension(extension);
+						if (!album) {
+							String id = item.get("id").asText();
+							int fileSize = item.get("size").asInt();
 
-						String subreddit = item.get("section").asText();
+							String extension = item.get("type").asText();
+							extension = parseExtension(extension);
 
-						saveID(id, subreddit + "\\", extension, fileSize);
+							String subreddit = item.get("section").asText();
+
+							saveID(id, subreddit + "\\", extension, fileSize);
+						} else System.out.println("Theres an album here but we dont care yet");
 
 						imagesComplete++;
 
@@ -188,16 +244,23 @@ public class ImgurRequest {
 			if (!(new File(baseDir + subfolder + hash + extension).length() == filesize)) {
 				InputStream in = new URL("http://i.imgur.com/" + hash
 						+ extension).openConnection().getInputStream();
-				OutputStream out = new FileOutputStream(baseDir + subfolder
+				OutputStream fileOut = new FileOutputStream(baseDir + subfolder
 						+ hash + extension);
-				copy(in, out);
+
+				copy(in, fileOut);
 			}
 
 			if (listener != null) {
 				try {
 
-					listener.newImage(ImageIO.read(new File(baseDir + subfolder
-							+ hash + extension)));
+					// listener.newImage(ImageIO.read(new File(baseDir +
+					// subfolder
+					// + hash + extension)));
+
+					listener.newImage(ImageIO.read(new URL(
+							"http://i.imgur.com/" + hash + extension)
+							.openConnection().getInputStream()));
+
 				} catch (Exception e) {
 					// eh
 				}
