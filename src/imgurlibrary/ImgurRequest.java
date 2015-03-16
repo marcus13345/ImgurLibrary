@@ -3,6 +3,16 @@ package imgurlibrary;
 import java.awt.image.BufferedImage;
 import java.io.File;
 
+/**
+ * this is the root class for any and all imgur downloading requests.
+ * not super because some wrappers exist. anyways, it tells requests
+ * where to download and where to trigger event for new images being downloaded.
+ * as well, it stores my imgur API credentials so one can access the API.
+ * 
+ * @author mgosselin
+ *
+ */
+
 public abstract class ImgurRequest implements Runnable {
 	public static String LOCAL_ROOT = System.getenv("USERPROFILE") + "\\Desktop\\imgur";
 	protected final String AuthorizationToken = "76535d44f1f94da";
@@ -10,6 +20,7 @@ public abstract class ImgurRequest implements Runnable {
 	protected boolean busy;
 	private final ImageListener listener;
 	private volatile int downloaded, discovered, failed;
+	
 	static {
 		if (!new File(LOCAL_ROOT).exists()) {
 			new File(LOCAL_ROOT).mkdirs();
@@ -59,11 +70,11 @@ public abstract class ImgurRequest implements Runnable {
 		return ((double)(downloaded + failed) / (discovered == 0 ? 1 : discovered));
 	}
 
-	public abstract double getScanProgress(); // idunno how YOU want to
-												// calculate this but uh
-
-	public final boolean isBusy() { // i aint doing it for you so....
-		return busy; // ~All interfaces ever
+	
+	public abstract double getScanProgress();
+	
+	public final boolean isBusy() {
+		return busy;
 	}
 
 	public abstract void run();

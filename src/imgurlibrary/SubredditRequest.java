@@ -15,6 +15,14 @@ import org.apache.commons.io.IOUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+/**
+ * this class is a class that will simply take a subreddit, and a number of pages
+ * and download them to the path set out in the parents class, imgur request.
+ * 
+ * @author mgosselin
+ *
+ */
+
 public class SubredditRequest extends ImgurRequest {
 	private final int pages;
 	private int pagesScanned;
@@ -56,7 +64,7 @@ public class SubredditRequest extends ImgurRequest {
 
 			try {
 
-				String path = "https://api.imgur.com/3/gallery/r/emmawatson/time/0.json";
+				String path = "https://api.imgur.com/3/gallery/r/" + subreddit + "/time/" + page + ".json";
 
 				HttpURLConnection connection = (HttpURLConnection) ((new URL(path)).openConnection());
 
